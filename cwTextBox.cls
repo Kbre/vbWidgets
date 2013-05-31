@@ -956,7 +956,7 @@ Dim MCC As cCairoContext
   If Len(mText) = 0 Then 'a short-cut, to avoid the more expensive calculations below
     ReDim RowsCharOffset(0)
     ReDim RowsCharCount(0)
-    mRowCount = 0
+    mRowCount = 1
     CaretPos = 0
     CurRow = 0
     CurPos = 0
