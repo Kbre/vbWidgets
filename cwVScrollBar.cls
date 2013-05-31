@@ -312,7 +312,7 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
     End If
     Cairo.Theme.DrawTo CC, W, thmTypeArrow, State, M - ArrowSize / 2, y + (ButtonSize - ArrowSize) / 2 - 1, ArrowSize, ArrowSize, 0, thmDirectionUp
   Else
-    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.1)
+    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.4)
     State = IIf(TOver, thmStateHovered, 0)
     If mMax <> mMin Then
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, 0, y, dx, ButtonSize, mButtonRadius, thmDirectionRight
@@ -334,7 +334,7 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
     End If
     Cairo.Theme.DrawTo CC, W, thmTypeArrow, State, M - ArrowSize / 2, y + (ButtonSize - ArrowSize) / 2 + 1, ArrowSize, ArrowSize, 0, thmDirectionDown
   Else
-    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.1)
+    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.4)
     State = IIf(BOver, thmStateHovered, 0)
     If mMax <> mMin Then
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, 0, y, dx, ButtonSize, mButtonRadius, thmDirectionRight
@@ -347,10 +347,10 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
 End Sub
  
 Private Sub DrawMButton(CC As cCairoContext)
-Dim y As Single, BorderColor As Long, BorderAlpha As Double, State As enmThemeDrawingState
+Dim Y As Single, BorderAlpha As Double, State As enmThemeDrawingState
 
   y = ButtonSize + MButtonPos
-  BorderColor = W.BorderColor
+  'BorderColor = W.BorderColor
 
   If mMax <> mMin Then
     If mDown Then
@@ -360,7 +360,7 @@ Dim y As Single, BorderColor As Long, BorderAlpha As Double, State As enmThemeDr
       Cairo.Theme.DrawTo CC, W, thmTypeShine, State, 1, y + 1, dx - 1, MButtonSize - 2, mButtonRadius, thmDirectionRight
       Cairo.Theme.DrawTo CC, W, thmTypeScrollBarGripperMarks, State, 0, y, dx, MButtonSize, 0, thmDirectionVert
     Else
-      BorderAlpha = Alpha * IIf(W.MouseOver, 0.7, 0.5)
+      BorderAlpha = Alpha * IIf(W.MouseOver, 0.7, 0.4)
       State = IIf(MOver, thmStateHovered, 0)
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, 0, y, dx, MButtonSize, mButtonRadius, thmDirectionRight
       Cairo.Theme.DrawTo CC, W, thmTypeShine, State, 1, y + 1, Int(dx / 2 + 0.1) - 0.25, MButtonSize - 2, mButtonRadius, thmDirectionRight

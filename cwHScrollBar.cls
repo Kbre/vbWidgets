@@ -326,7 +326,7 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
     End If
     Cairo.Theme.DrawTo CC, W, thmTypeArrow, State, x + (ButtonSize - ArrowSize) / 2 - 1, M - ArrowSize / 2, ArrowSize, ArrowSize, 0, thmDirectionLeft
   Else
-    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.1)
+    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.4)
     State = IIf(TOver, thmStateHovered, 0)
     If mMax <> mMin Then
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, x, 0, ButtonSize, dy, mButtonRadius, thmDirectionDown
@@ -349,7 +349,7 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
     End If
     Cairo.Theme.DrawTo CC, W, thmTypeArrow, State, x + (ButtonSize - ArrowSize) / 2 + 1, M - ArrowSize / 2, ArrowSize, ArrowSize, 0, thmDirectionRight
   Else
-    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.1)
+    BorderAlpha = IIf(W.MouseOver And mMax <> mMin, 0.7, 0.4)
     State = IIf(BOver, thmStateHovered, 0)
     If mMax <> mMin Then
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, x, 0, ButtonSize, dy, mButtonRadius, thmDirectionDown
@@ -374,7 +374,7 @@ Dim x As Single, BorderAlpha As Double, State As enmThemeDrawingState
       Cairo.Theme.DrawTo CC, W, thmTypeShine, State, x + 1, 1, MButtonSize - 2, dy - 1, mButtonRadius, thmDirectionDown
       Cairo.Theme.DrawTo CC, W, thmTypeScrollBarGripperMarks, State, x, 0, MButtonSize, dy, 0, thmDirectionHorz
     Else
-      BorderAlpha = Alpha * IIf(W.MouseOver, 0.7, 0.5)
+      BorderAlpha = Alpha * IIf(W.MouseOver, 0.7, 0.4)
       State = IIf(MOver, thmStateHovered, 0)
       Cairo.Theme.DrawTo CC, W, thmTypeButtonFace, State, x, 0, MButtonSize, dy, mButtonRadius, thmDirectionDown
       Cairo.Theme.DrawTo CC, W, thmTypeShine, State, x + 1, 1, MButtonSize - 2, Int(dy / 2 + 0.1) - 0.25, mButtonRadius, thmDirectionDown
