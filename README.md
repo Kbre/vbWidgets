@@ -3,12 +3,13 @@ vbWidgets
 
 Cairo-based Replacements for the CommonControls, based on the vbRichClient-Framework (www.vbRichClient.com)
 
-List of VB6 Controls to replace:
+***
+##List of VB6 Controls to replace:
 
-Basic Controls:
+###Basic Controls:
 * PictureBox	
-* Label			--> cwLabel
-* TextBox		--> cwTextBox
+* Label			      --> cwLabel
+* TextBox		      --> cwTextBox
 * Frame
 * CommandButton		--> cwButton
 * CheckBox
@@ -27,7 +28,7 @@ Basic Controls:
 * Data
 * OLE
 
-Common Controls:
+###Common Controls:
 * TabStrip
 * ToolBar
 * StatusBar
@@ -44,7 +45,7 @@ Common Controls:
 * FlatScrollBar
 * CoolBar
 
-Other MS Controls:
+###Other MS Controls:
 * MSComm
 * MSHFlexGrid
 * Winsock
