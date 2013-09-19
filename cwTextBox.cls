@@ -78,6 +78,7 @@ End Property
 Public Property Let Text(ByVal NewValue$)
   If NewValue = mText Then Exit Property
   mText = NewValue
+  mSelStart = 0
   mSelLength = 0
   CalcRows
   W.Refresh
@@ -646,7 +647,7 @@ Dim BorderOffs&, TWidth As Single, AlgnOffs As Single, VOffs As Single
 
   Set MCC = SetCurFont
     'calculate Alignment-Offset
-    If Alignment Then
+    If mAlignment Then
       TWidth = MCC.GetTextExtentPtr(pS, Abs(RowsCharCount(CurRow)))
       AlgnOffs = GetAlignOffset(TWidth)
     End If
@@ -941,7 +942,7 @@ Static LastTextHeight&
 End Sub
 
 Private Function GetAlignOffset(TWidth As Single) As Single
-  Select Case Alignment
+  Select Case mAlignment
     Case vbLeftJustify: GetAlignOffset = 0
     Case vbCenter: GetAlignOffset = (dxx - TWidth - 1 + HScrollMax) / 2
      Case vbRightJustify
