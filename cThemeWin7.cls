@@ -13,6 +13,23 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 Option Explicit
 
+Private Type LOGFONT
+  lfHeight As Long
+  lfWidth As Long
+  lfEscapement As Long
+  lfOrientation As Long
+  lfWeight As Long
+  LFItalic As Byte
+  LFUnderline As Byte
+  LFStrikeOut As Byte
+  lfCharSet As Byte
+  lfOutPrecision As Byte
+  lfClipPrecision As Byte
+  lfQuality As Byte
+  lfPitchAndFamily As Byte
+  lfFaceName As String * 32
+End Type
+
 Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
 Private Declare Function SystemParametersInfoW Lib "user32" (ByVal uAction As Long, ByVal uParam As Long, lpvParam As Any, ByVal fuWinIni As Long) As Long
 
@@ -35,9 +52,9 @@ End Sub
 
 Private Function cTheme_GetIconFontName() As String
 Const SPI_GETICONTITLELOGFONT As Long = 31
-Dim S As String: S = String$(30, 0)
-  SystemParametersInfoW SPI_GETICONTITLELOGFONT, 0, ByVal StrPtr(S), 0
-  cTheme_GetIconFontName = Mid$(S, 15, InStr(15, S, vbNullChar) - 15)
+Static LFW As LOGFONT
+  SystemParametersInfoW SPI_GETICONTITLELOGFONT, LenB(LFW), ByVal VarPtr(LFW), 0
+  cTheme_GetIconFontName = Left$(LFW.lfFaceName, InStr(LFW.lfFaceName, vbNullChar) - 1)
 End Function
  
 Private Sub cTheme_FillThemeColorArray(DstThemeColorArray() As Long)
@@ -129,7 +146,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
           CC.ClosePath
         CC.RotateDrawingsDeg -Angle
         
-        Color = W.ForeColor
+        Color = IIf(W.Enabled, W.ForeColor, W.DisabledColor)
         If State And thmStateHovered And W.Enabled Then Color = W.FocusColor
         Set Pat = Cairo.CreateLinearPattern(-dx * 0.1, -dy * 0.15, dx * 0.3, dy * 0.3)
           Pat.AddColorStop 0, Color, Alpha, 0.8
@@ -153,7 +170,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         x = Int(x + (dx - 3 * Lines) \ 2 + 2)
         
         CC.SetLineWidth 3
-        CC.SetLineCap Cairo_LINE_CAP_ROUND
+        CC.SetLineCap CAIRO_LINE_CAP_ROUND
         CC.SetSourceColor IIf(State And thmStateHovered, W.HoverColor, vbWhite), Alpha * 0.8, 0.95
         Offs = Int(dy * 0.51) + 0.1
         Size = Int(dy * 0.16)
@@ -163,7 +180,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         Next i
         
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_SQUARE
+        CC.SetLineCap CAIRO_LINE_CAP_SQUARE
         CC.SetSourceColor W.ForeColor, Alpha * 0.6, 0.96
         For i = 0 To Lines - 1
           If Direction = thmDirectionVert Then
@@ -204,7 +221,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         
       Case thmTypeOptionBox
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_BUTT
+        CC.SetLineCap CAIRO_LINE_CAP_BUTT
         Color = IIf(W.MouseOver, W.ShadeColor(W.FocusColor, 0.4), W.BorderColor)
         
         CC.ARC x + Radius, y + Radius, Radius
@@ -241,7 +258,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         
       Case thmTypeCheckBox
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_BUTT
+        CC.SetLineCap CAIRO_LINE_CAP_BUTT
         Color = IIf(W.MouseOver, W.ShadeColor(W.FocusColor, 0.4), W.BorderColor)
         
         CC.Rectangle x, y, dx, dy, True
@@ -265,7 +282,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         CC.Fill , Pat
 
         If State = thmStateChecked Then
-          CC.SetLineCap Cairo_LINE_CAP_ROUND
+          CC.SetLineCap CAIRO_LINE_CAP_ROUND
           CC.SetLineWidth 2
             CC.SetSourceColor W.FocusColor, 0.85, 0.27
             x = x + 2: dx = dx - 4
@@ -349,7 +366,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         dy = CLng((dy + 0.1) * ZoomFac) / ZoomFac
  
         CC.SetLineWidth 2.5 / ZoomFac
-        CC.SetLineCap Cairo_LINE_CAP_ROUND
+        CC.SetLineCap CAIRO_LINE_CAP_ROUND
         CC.SetSourceColor vbWhite, 0.3 * Alpha
         CC.MoveTo x + 0.5, y + 0.5
         CC.RelLineTo IIf(dy > dx, 0, dx - 3), IIf(dy > dx, dy - 3, 0)

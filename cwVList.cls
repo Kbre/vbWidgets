@@ -45,6 +45,7 @@ Private mColSortStates() As ColumnSortState, mCurSortCol As Integer
 Private mColDefaultWidth%, mColWidthStart%, mColWidths%(), mColMap%()
 Private mCurCol%, mColumnIndex%, mColDeltaStart%, mColClickIdx% ', mPreviousListIndex&
 Private mAllowColResize As Boolean, mAllowRowResize As Boolean, SelectMode As Boolean
+Private mAlternateRowColor As Long, mRowColor As Long
 
 Public WithEvents HScrollBar As cwHScrollBar
 Attribute HScrollBar.VB_VarHelpID = -1
@@ -66,6 +67,10 @@ Private Sub Class_Initialize()
   AllowLeftRightKeys = True
   mShowHoverBar = True
   mShowSelection = True
+  
+  mRowColor = -1
+  mAlternateRowColor = -1
+  
   mRowHeight = 17
   mListIndex = -1
   mHoverIndex = -1
@@ -100,7 +105,7 @@ End Property
 Public Property Let ListCount(ByVal NewValue As Long)
   If NewValue < 0 Then Exit Property
   
-  mHoverIndex = -1
+  If NewValue < mListCount Then mHoverIndex = -1
   mListCount = NewValue
   If mListIndex > mListCount - 1 Then mListIndex = mListCount - 1
   W_Resize
@@ -268,6 +273,19 @@ Public Sub ClearSelections(Optional ByVal NewListIndex As Long = -1)
   ListIndex = NewListIndex
 End Sub
 
+Public Function GetSelections() As Variant()
+Dim i As Long, j As Long, Arr(), ArrUB As Long
+  ArrUB = 64: ReDim Arr(0 To 64)
+  For i = 0 To mListCount - 1
+    If Selected(i) Then
+      If j > ArrUB Then ArrUB = ArrUB * 1.6: ReDim Preserve Arr(0 To ArrUB)
+      Arr(j) = i: j = j + 1
+    End If
+  Next i
+  If j Then ReDim Preserve Arr(0 To j - 1) Else Arr = Array()
+  GetSelections = Arr
+End Function
+
 Public Property Get RowHeight() As Long
   RowHeight = mRowHeight
 End Property
@@ -340,6 +358,12 @@ Public Property Get ColumnDefaultWidth() As Integer
 End Property
 Public Property Let ColumnDefaultWidth(ByVal NewValue As Integer)
   mColDefaultWidth = NewValue
+  W.LockRefresh = True
+    Dim ColCount As Long
+        ColCount = ColumnCount
+        ColumnCount = 1
+        ColumnCount = ColCount
+  W.LockRefresh = False 'enforce a visual refresh
 End Property
 
 Public Property Get ColumnWidth(ByVal Idx As Long) As Integer
@@ -426,6 +450,7 @@ End Sub
 
 Private Sub TScroll_Timer()
 Dim DoRefresh As Boolean
+
   If VScrollBar.Widget.Visible Then
     If TScroll.Tag = "Up" Then
       VScrollBar.Widget.LockRefresh = True
@@ -649,7 +674,7 @@ Dim NewSel&, i&, DoRefresh As Boolean
       TScroll.Tag = "Up": TScroll.Interval = i: If Not TScroll.Enabled Then TScroll.Enabled = True
     ElseIf y - mRowHeight * mVisibleRows > 0 Then
       i = 300 - (y - mRowHeight * mVisibleRows) * 10: If i < 10 Then i = 10
-      TScroll.Tag = "Down": TScroll.Interval = i: If Not TScroll.Enabled Then TScroll.Enabled = True
+      TScroll.Tag = "Down": TScroll.Interval = i: If W.DragDetect And Not TScroll.Enabled Then TScroll.Enabled = True
     End If
     If HScrollBar.Widget.Visible Then
       If x <= 1 Then
@@ -661,7 +686,7 @@ Dim NewSel&, i&, DoRefresh As Boolean
       End If
     End If
   End If
-  RaiseEvent MouseMoveOnListItem(mHoverIndex, x, y - (mHoverIndex - VScrollBar.Value) * mRowHeight - 1)
+  If y > 0 Then RaiseEvent MouseMoveOnListItem(mHoverIndex, x, y - (mHoverIndex - VScrollBar.Value) * mRowHeight - 1)
 
   If DoRefresh And Len(TScroll.Tag) = 0 Then W.Refresh
 End Sub
@@ -670,8 +695,9 @@ Private Sub W_MouseUp(Button As Integer, Shift As Integer, ByVal x As Single, By
 Dim i&, NewSel&
   x = x - mRowSelectorWidth
   y = y - mHeaderHeight
-  
-  If y < 0 And mListIndex < 0 Then TScroll.Enabled = False: Exit Sub
+ 
+  If mListIndex < 0 Then mSelectionInProgress = False: TScroll.Enabled = False: Exit Sub
+  If y < 0 Then GoTo FinalizeSelection
   
   NewSel = GetListIndexFromMouseY(y)
   
@@ -695,6 +721,8 @@ Dim i&, NewSel&
       Next i
     End If
   End If
+
+FinalizeSelection:
   mSelX = 0: mSelY = 0
   TScroll.Enabled = False
   If mSelectionInProgress Then
@@ -757,12 +785,14 @@ Dim i As Long, j As Long, ArrowSize As Long, Width As Single, Pat As cCairoPatte
  
   Width = dx - 4 - IIf(VScrollBar.Widget.Visible, mScrollerSize, 0)
   
+  W.SelectFontSettingsInto CC
+  
   CC.Save
- 
+    
     If mHeaderHeight Then
       CC.TranslateDrawings 1, 1
       CC.ClipExplicit 0, 0, Width + 2, mHeaderHeight
-        RaiseEvent OwnerDrawHeader(CC, Width + 2, mHeaderHeight - 1, Alpha)
+        RaiseEvent OwnerDrawHeader(CC, Width + 2, mHeaderHeight, Alpha)
         W.RaiseBubblingEvent Me, "OwnerDrawHeader", CC, Width + 2, mHeaderHeight - 1, Alpha
       CC.ResetClip
       CC.TranslateDrawings 1, mHeaderHeight
@@ -778,7 +808,7 @@ Dim i As Long, j As Long, ArrowSize As Long, Width As Single, Pat As cCairoPatte
       CC.TranslateDrawings mRowSelectorWidth, 0
       Width = Width - RowSelectorWidth
     End If
- 
+    
     W.SelectFontSettingsInto CC
     For i = 0 To mVisibleRows
       j = i + ScrollIndex
@@ -786,13 +816,28 @@ Dim i As Long, j As Long, ArrowSize As Long, Width As Single, Pat As cCairoPatte
       If j < mListCount Then
         If mRowSelectorWidth > 0 And Selected(j) And j = mListIndex Then
           If mRowSelectorWidth > mRowHeight Then ArrowSize = mRowHeight * 0.6 Else ArrowSize = mRowSelectorWidth * 0.6
-          Cairo.Theme.DrawTo CC, W, thmTypeArrow, 0, -(mRowSelectorWidth + ArrowSize) \ 2 + 1, (mRowHeight - ArrowSize) \ 2 + 1, ArrowSize, ArrowSize, 0, thmDirectionRight
+          Cairo.Theme.DrawTo CC, W, thmTypeArrow, 0, -(mRowSelectorWidth + ArrowSize) \ 2 + 0.5, (mRowHeight - ArrowSize) \ 2, ArrowSize, ArrowSize, 0, thmDirectionRight
         End If
         
-        CC.ClipExplicit 0, 0, Width, mRowHeight + 1
+        CC.ClipExplicit 0, 0, Width + 1, mRowHeight + 1
         
           CC.SetLineWidth 1, True
-          
+            
+            CC.Rectangle 0, 1, Width + 1, mRowHeight ', True
+              If mAlternateRowColor <> -1 Then 'ensure a different Background-Line-Coloring for Odd-Indexes
+                If j Mod 2 Then
+                  CC.SetSourceColor mAlternateRowColor
+                  CC.Fill
+                ElseIf mRowColor <> -1 Then
+                  CC.SetSourceColor mRowColor
+                  CC.Fill
+                End If
+              ElseIf mRowColor <> -1 Then
+                CC.SetSourceColor mRowColor
+                CC.Fill
+              End If
+            CC.ClearPath
+  
           If mShowHoverBar Then
             If MultiSelect = vbMultiSelectNone And j = HoverIndex And W.MouseOver Then
               Set Pat = Cairo.CreateLinearPattern(0, 0, 0, mRowHeight)
@@ -821,6 +866,7 @@ Dim i As Long, j As Long, ArrowSize As Long, Width As Single, Pat As cCairoPatte
     Next i
   CC.Restore
   
+  If W.BorderColor < 0 Then Exit Sub
   CC.SetLineWidth 1, True
   Cairo.Theme.DrawTo CC, W, thmTypeBorder, 0, 0, 0, dx, dy
 End Sub
@@ -932,3 +978,22 @@ Dim PreviousColumnIdx%, OldColIdx%, LastState As ColumnSortState
   End If
   If mColDeltaStart > 0 Then mColDeltaStart = 0: AdjustDimensions ': Exit Sub
 End Sub
+ 
+Public Property Get RowColor() As Long
+  RowColor = mRowColor
+End Property
+Public Property Let RowColor(ByVal NewValue As Long)
+  If mRowColor = NewValue Then Exit Property
+     mRowColor = NewValue
+  W.Refresh
+End Property
+ 
+Public Property Get AlternateRowColor() As Long
+  AlternateRowColor = mAlternateRowColor
+End Property
+Public Property Let AlternateRowColor(ByVal NewValue As Long)
+  If mAlternateRowColor = NewValue Then Exit Property
+     mAlternateRowColor = NewValue
+  W.Refresh
+End Property
+
