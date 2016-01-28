@@ -284,12 +284,12 @@ Dim Pat As cCairoPattern, Color As Long
     CC.Fill , Pat
     
     
-    CC.SetSourceColor Color, Alpha, 1
-      CC.DrawLine 0, ButtonSize + 1, 0, dy - ButtonSize - 1
+    CC.SetSourceColor Color, Alpha * 0.8, 1
+      CC.DrawLine 0, ButtonSize + 1, 0, dy - ButtonSize - 1, True
     CC.Stroke
 
-    CC.SetSourceColor Color, Alpha, 1.09
-      CC.DrawLine dx - 1, ButtonSize + 1, dx - 1, dy - ButtonSize - 1
+    CC.SetSourceColor Color, Alpha * 0.8, 1.09
+      CC.DrawLine dx - 1, ButtonSize + 1, dx - 1, dy - ButtonSize - 1, True
     CC.Stroke
   End If
 End Sub
@@ -347,10 +347,9 @@ Dim BorderAlpha As Double, State As enmThemeDrawingState
 End Sub
  
 Private Sub DrawMButton(CC As cCairoContext)
-Dim Y As Single, BorderAlpha As Double, State As enmThemeDrawingState
+Dim y As Single, BorderAlpha As Double, State As enmThemeDrawingState
 
   y = ButtonSize + MButtonPos
-  'BorderColor = W.BorderColor
 
   If mMax <> mMin Then
     If mDown Then

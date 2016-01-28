@@ -13,6 +13,23 @@ Attribute VB_PredeclaredId = False
 Attribute VB_Exposed = True
 Option Explicit
 
+Private Type LOGFONT
+  lfHeight As Long
+  lfWidth As Long
+  lfEscapement As Long
+  lfOrientation As Long
+  lfWeight As Long
+  LFItalic As Byte
+  LFUnderline As Byte
+  LFStrikeOut As Byte
+  lfCharSet As Byte
+  lfOutPrecision As Byte
+  lfClipPrecision As Byte
+  lfQuality As Byte
+  lfPitchAndFamily As Byte
+  lfFaceName As String * 32
+End Type
+
 Private Declare Function GetSystemMetrics Lib "user32" (ByVal nIndex As Long) As Long
 Private Declare Function SystemParametersInfoW Lib "user32" (ByVal uAction As Long, ByVal uParam As Long, lpvParam As Any, ByVal fuWinIni As Long) As Long
 
@@ -35,9 +52,9 @@ End Sub
 
 Private Function cTheme_GetIconFontName() As String
 Const SPI_GETICONTITLELOGFONT As Long = 31
-Dim S As String: S = String$(30, 0)
-  SystemParametersInfoW SPI_GETICONTITLELOGFONT, 0, ByVal StrPtr(S), 0
-  cTheme_GetIconFontName = Mid$(S, 15, InStr(15, S, vbNullChar) - 15)
+Static LFW As LOGFONT
+  SystemParametersInfoW SPI_GETICONTITLELOGFONT, LenB(LFW), ByVal VarPtr(LFW), 0
+  cTheme_GetIconFontName = Left$(LFW.lfFaceName, InStr(LFW.lfFaceName, vbNullChar) - 1)
 End Function
  
 Private Sub cTheme_FillThemeColorArray(DstThemeColorArray() As Long)
@@ -63,7 +80,7 @@ Private Sub cTheme_DrawTo(CC As cCairoContext, W As cWidgetBase, _
 Dim i As Long, Offs As Single, Size As Single, Tmp As Single
 Dim Lines As Long, Angle As Long, ZoomFac As Double
 Dim Pat As cCairoPattern, Color As Long, Alpha As Single
-  
+
   Alpha = W.AlphaInherited
   CC.Matrix.CalculateScale ZoomFac, ZoomFac
  
@@ -105,10 +122,9 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
             Case thmDirectionLeft:  Set Pat = Cairo.CreateLinearPattern(dx, y, x, y)
           End Select
             If State And thmStatePressed Then
-              Pat.AddColorStop 0, vbBlack, 0.15 * Alpha
-              Pat.AddColorStop 0.5, vbWhite, 0.1 * Alpha
-              Pat.AddColorStop 0.9, vbWhite, 0.4 * Alpha
-              Pat.AddColorStop 1, vbWhite, 0.55 * Alpha
+              Pat.AddColorStop 0, W.SelectionColor, 0.16 * Alpha
+              Pat.AddColorStop 0.21, vbWhite, 0.24 * Alpha
+              Pat.AddColorStop 1, vbWhite, 0.62 * Alpha
             Else
               Pat.AddColorStop 0, vbWhite, 0.45 * Alpha
               Pat.AddColorStop 1, vbWhite, 0.35 * Alpha
@@ -130,7 +146,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
           CC.ClosePath
         CC.RotateDrawingsDeg -Angle
         
-        Color = W.ForeColor
+        Color = IIf(W.Enabled, W.ForeColor, W.DisabledColor)
         If State And thmStateHovered And W.Enabled Then Color = W.FocusColor
         Set Pat = Cairo.CreateLinearPattern(-dx * 0.1, -dy * 0.15, dx * 0.3, dy * 0.3)
           Pat.AddColorStop 0, Color, Alpha, 0.8
@@ -154,7 +170,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         x = Int(x + (dx - 3 * Lines) \ 2 + 2)
         
         CC.SetLineWidth 3
-        CC.SetLineCap Cairo_LINE_CAP_ROUND
+        CC.SetLineCap CAIRO_LINE_CAP_ROUND
         CC.SetSourceColor IIf(State And thmStateHovered, W.HoverColor, vbWhite), Alpha * 0.8, 0.95
         Offs = Int(dy * 0.51) + 0.1
         Size = Int(dy * 0.16)
@@ -164,7 +180,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         Next i
         
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_SQUARE
+        CC.SetLineCap CAIRO_LINE_CAP_SQUARE
         CC.SetSourceColor W.ForeColor, Alpha * 0.6, 0.96
         For i = 0 To Lines - 1
           If Direction = thmDirectionVert Then
@@ -205,7 +221,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         
       Case thmTypeOptionBox
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_BUTT
+        CC.SetLineCap CAIRO_LINE_CAP_BUTT
         Color = IIf(W.MouseOver, W.ShadeColor(W.FocusColor, 0.4), W.BorderColor)
         
         CC.ARC x + Radius, y + Radius, Radius
@@ -242,7 +258,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         
       Case thmTypeCheckBox
         CC.SetLineWidth 1
-        CC.SetLineCap Cairo_LINE_CAP_BUTT
+        CC.SetLineCap CAIRO_LINE_CAP_BUTT
         Color = IIf(W.MouseOver, W.ShadeColor(W.FocusColor, 0.4), W.BorderColor)
         
         CC.Rectangle x, y, dx, dy, True
@@ -266,7 +282,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         CC.Fill , Pat
 
         If State = thmStateChecked Then
-          CC.SetLineCap Cairo_LINE_CAP_ROUND
+          CC.SetLineCap CAIRO_LINE_CAP_ROUND
           CC.SetLineWidth 2
             CC.SetSourceColor W.FocusColor, 0.85, 0.27
             x = x + 2: dx = dx - 4
@@ -350,7 +366,7 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         dy = CLng((dy + 0.1) * ZoomFac) / ZoomFac
  
         CC.SetLineWidth 2.5 / ZoomFac
-        CC.SetLineCap Cairo_LINE_CAP_ROUND
+        CC.SetLineCap CAIRO_LINE_CAP_ROUND
         CC.SetSourceColor vbWhite, 0.3 * Alpha
         CC.MoveTo x + 0.5, y + 0.5
         CC.RelLineTo IIf(dy > dx, 0, dx - 3), IIf(dy > dx, dy - 3, 0)
@@ -363,11 +379,53 @@ Dim Pat As cCairoPattern, Color As Long, Alpha As Single
         CC.Rectangle x, y, dx, dy, True
         CC.Stroke , Pat
  
+      Case thmTypeProgressFace
+        Const SmudgeStopSizePixels As Long = 4, SmudgeMinWidth As Long = 20
+        Dim ProgBarSmudgeWidth As Double, FinalStopSizePct As Double, ProgBarSmudgeAlpha As Double
+        If Radius < 0.8 Then Radius = 0.3 Else Radius = Radius - 0.5
+        
+        CC.RoundedRect x + 1.25, y + 1, dx, dy - 2.25, Radius, True
+          CC.SetSourceColor W.SelectionColor, Alpha
+        CC.Fill
+        
+        CC.RoundedRect x + 2, y + 2.5, dx - 0.8, dy - 4.75, Radius - 0.3, True
+          CC.SetSourceColor vbBlack, 0.1 * Alpha
+        CC.Fill
+        
+        ProgBarSmudgeWidth = dx * 0.5
+        If ProgBarSmudgeWidth < SmudgeMinWidth Then ProgBarSmudgeWidth = SmudgeMinWidth
+        
+        'Ensure that the final two stops are a fixed pixel size
+        FinalStopSizePct = SmudgeStopSizePixels / (ProgBarSmudgeWidth + SmudgeStopSizePixels) + dx * 0.0002
+        
+        ProgBarSmudgeAlpha = 0.66
+        If dx < SmudgeMinWidth Then 'adjust the Smudge opacity so that the start and end smudges don't noticably overlap
+            ProgBarSmudgeAlpha = ProgBarSmudgeAlpha * (dx / SmudgeMinWidth)
+        End If
+        
+        Color = vbBlack 'just in case somebody wants to change the Smudge-BaseColor to something different than vbBlack
+        With Cairo.CreateLinearPattern(x + dx - ProgBarSmudgeWidth, 0, x + dx + 1, 0)
+          .AddColorStop 0, Color, 0 'this stop 'stretches' while the others are fixed
+          .AddColorStop 1 - FinalStopSizePct - FinalStopSizePct, Color, 0.22 * Alpha * ProgBarSmudgeAlpha
+          .AddColorStop 1 - FinalStopSizePct, Color, 0.33 * Alpha * ProgBarSmudgeAlpha
+          .AddColorStop 1, Color, 0.45 * Alpha * ProgBarSmudgeAlpha
+          CC.RoundedRect x + dx - ProgBarSmudgeWidth + 1.1, 2, ProgBarSmudgeWidth, dy - 2.75, Radius + 1, True
+          CC.Fill , .This
+        End With
+
+        With Cairo.CreateLinearPattern(x, 0, x + ProgBarSmudgeWidth, 0)
+          .AddColorStop 0, Color, 0.51 * Alpha * ProgBarSmudgeAlpha
+          .AddColorStop FinalStopSizePct, Color, 0.33 * Alpha * ProgBarSmudgeAlpha
+          .AddColorStop FinalStopSizePct + FinalStopSizePct, Color, 0.22 * Alpha * ProgBarSmudgeAlpha
+          .AddColorStop 1, Color, 0 'this stop 'stretches' while the others are fixed
+          CC.RoundedRect x, 2, ProgBarSmudgeWidth, dy - 2.75, Radius + 1, True
+          CC.Fill , .This
+        End With
+ 
       Case thmTypeToolButtonFace
       Case thmTypeMenuButtonFace
       Case thmTypeToolBarFace
       Case thmTypeStatusBarFace
-      Case thmTypeProgressFace
       Case thmTypeHeaderFace
 
       Case thmTypeBorderShadow

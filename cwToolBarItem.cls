@@ -16,14 +16,14 @@ Option Explicit
 Event Click()
 Event ArrowClick()
 
-Public Caption As String, IsCheckable As Boolean, Checked As Boolean
-Public ArrowType As DropDownArrowType
+Public Caption As String, IsCheckable As Boolean, ArrowType As DropDownArrowType
 
-Private BDown As Boolean, OutSide As Boolean, MOverArrow As Boolean
+Private BDown As Boolean, OutSide As Boolean, MOverArrow As Boolean, mChecked As Boolean
 
 Private dx As Single, dy As Single, Alpha As Single
-Private WithEvents W As cWidgetBase
+Private WithEvents W As cWidgetBase, WithEvents tmrDecouple As cTimer
 Attribute W.VB_VarHelpID = -1
+Attribute tmrDecouple.VB_VarHelpID = -1
 
 Private Sub Class_Initialize()
   Set W = Cairo.WidgetBase
@@ -36,16 +36,17 @@ End Property
 Public Property Get Widgets() As cWidgets
   Set Widgets = W.Widgets
 End Property
+ 
+Private Sub Class_Terminate()
+  Set tmrDecouple = Nothing
+End Sub
 
 Private Sub W_MouseDown(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
   If Button = 1 Then BDown = True: W.Refresh
 End Sub
 Private Sub W_MouseMove(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
-  
   OutSide = (x < 0 Or x > dx Or y < 0 Or y > dy)
-  
   MOverArrow = IIf(ArrowType > 0 And Not OutSide And x > dx - 16, True, False)
-  
   W.Refresh
 End Sub
 Private Sub W_MouseUp(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
@@ -53,15 +54,32 @@ Private Sub W_MouseUp(Button As Integer, Shift As Integer, ByVal x As Single, By
   BDown = False: OutSide = False: W.Refresh
 End Sub
 
+Public Property Get Checked() As Boolean
+  Checked = mChecked
+End Property
+Public Property Let Checked(ByVal NewValue As Boolean)
+  If mChecked = NewValue Or Not IsCheckable Then Exit Property
+  mChecked = NewValue
+  Set tmrDecouple = New_c.Timer(15, True, MOverArrow)
+  W.Refresh
+End Property
+
 Private Sub CheckAndRaiseClick()
-  If MOverArrow Then
-    RaiseEvent ArrowClick
-    W.RaiseBubblingEvent Me, "ArrowClick"
-  Else
-    If IsCheckable Then Checked = Not Checked
-    RaiseEvent Click
-    W.RaiseBubblingEvent Me, "Click"
-  End If
+  If Not MOverArrow And IsCheckable Then mChecked = Not mChecked
+  Set tmrDecouple = New_c.Timer(15, True, MOverArrow)
+End Sub
+
+Private Sub tmrDecouple_Timer()
+Dim OverArrow As Boolean
+    OverArrow = tmrDecouple.Tag
+    Set tmrDecouple = Nothing
+    If OverArrow Then
+      RaiseEvent ArrowClick
+      W.RaiseBubblingEvent Me, "ArrowClick"
+    Else
+      RaiseEvent Click
+      W.RaiseBubblingEvent Me, "Click"
+    End If
 End Sub
 
 Private Sub W_MouseEnter(ByVal MouseLeaveWidget As vbRichClient5.cWidgetBase)
@@ -92,28 +110,26 @@ Const ArrowSize& = 8
   End If
   
   IcoOffs = IIf(Len(Caption), 5, 3)
+  If Len(W.ImageKey) Then xOffs = dy
   
-  W.SelectFontSettingsInto CC
-
   If W.Enabled Then
-    W.SelectFontSettingsInto CC
-    CC.SetLineWidth IIf(BDown Or Checked, 1.1, 1)
+    CC.SetLineWidth IIf(BDown Or mChecked, 1.1, 1)
     
-    If BDown Or Checked Then
-      If MOverArrow Then CC.ClipExplicit dx - 16, 0, dx, dy
+    If BDown Or mChecked Then
+      If MOverArrow And Not mChecked Then CC.ClipExplicit dx - 16, 0, dx, dy
         CC.RoundedRect 0, 0, dx, dy, 2.2, True
         CC.SetSourceColor W.Parent.BackColor, Alpha, 0.89
         CC.Fill
-      If MOverArrow Then CC.ResetClip
+      If MOverArrow And Not mChecked Then CC.ResetClip
     End If
     
-    If W.MouseOver Or Checked Then
+    If W.MouseOver Or mChecked Then
       CC.RoundedRect 0, 0, dx, dy, 2.2, True
       Set Pat = Cairo.CreateLinearPattern(0, 0, 0, dy)
-          Pat.AddColorStop 0, vbWhite, , IIf(BDown Or Checked, 0.48, 0.82)
-          Pat.AddColorStop 1, vbWhite, , IIf(BDown Or Checked, 0.61, 0.48)
+          Pat.AddColorStop 0, vbWhite, , IIf(BDown Or mChecked, 0.48, 0.82)
+          Pat.AddColorStop 1, vbWhite, , IIf(BDown Or mChecked, 0.61, 0.48)
       CC.Stroke , Pat
-      CC.DrawLine 2, dy, dx - 3, dy, True, 1, IIf(BDown Or Checked, vbWhite, vbBlack), 0.2
+      CC.DrawLine 1.5, dy - 0.2, dx - 2.5, dy - 0.2, True, 1, IIf(BDown Or mChecked, vbWhite, vbBlack), 0.2
 
       If ArrowType <> ddNone And W.MouseOver Then
         W.Alpha = 0.85
@@ -122,11 +138,9 @@ Const ArrowSize& = 8
       End If
     End If
     
-    If Len(W.ImageKey) Then
-      CC.RenderSurfaceContent W.ImageKey, IcoOffs, 2.5, 19, 19, CAIRO_FILTER_BEST, W.Alpha, True
-      xOffs = dy
-    End If
+    If Len(W.ImageKey) Then CC.RenderSurfaceContent W.ImageKey, IcoOffs, 2.5, 19, 19, CAIRO_FILTER_BEST, W.Alpha, True
     
+    W.SelectFontSettingsInto CC
     If Len(Caption) Then CC.TextOut 5 + xOffs, 4, Caption
 
   Else 'disabled state
@@ -136,6 +150,7 @@ Const ArrowSize& = 8
     Srf.AdjustColors 100
     CC.RenderSurfaceContent Srf, IcoOffs, 2.5, 19, 19, CAIRO_FILTER_BEST, 0.3, True
     
+    W.SelectFontSettingsInto CC, W.DisabledColor
     If Len(Caption) Then CC.TextOut 5 + xOffs, 4, Caption
   End If
   
@@ -148,6 +163,3 @@ Const ArrowSize& = 8
     End If
   End If
 End Sub
-
-
-

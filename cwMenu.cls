@@ -25,10 +25,20 @@ Event Click(ByVal CurMenuItemPath As String)
 Event MenuBarEntryShift(ByVal ShiftLeft As Boolean)
 Event MenuDestroyed(ByVal DestroyedByKeyPress As Boolean)
 
-Private WithEvents PopUp As cfPopUp 'this PopupForm-HelperClass is hosted here in the vbWidgets.dll-Project
-Attribute PopUp.VB_VarHelpID = -1
+'To have a option-like MenuItem, you must set the IsCheckable property to True and set the IconKey property
+'to this value:
+Private Const OptionMenuItemIconKey = "OptMenuItem"
+'No real IconResource is needed at all in the global Cairo.ImageList - the IconImageKey is just used as
+'the "magic Indicator" for the OptionBox-Rendering-Workaround.
+'This is done because the cMenuItem class have not a IsOption property in RC5's vbRichClient.dll
+
+Public WithEvents fPopUp As cfPopUp 'this PopupForm-HelperClass is hosted here in the vbWidgets.dll-Project
+Attribute fPopUp.VB_VarHelpID = -1
 Private WithEvents mInitiatorWidget As cWidgetBase
 Attribute mInitiatorWidget.VB_VarHelpID = -1
+Private WithEvents SC As cSubClass
+Attribute SC.VB_VarHelpID = -1
+
 Private mSubMenu As cwMenu, mActiveRootWidget As Object, mActiveMenuItem As cwMenuItem
 Private mMouseX As Single, mMouseY As Single
 Private mDataSource As cMenuItem, mRowHeight As Double, mMenuWidth As Double, mMenuHeight As Double
@@ -60,7 +70,11 @@ End Property
 Public Property Set DataSource(NewValue As cMenuItem)
   Set mDataSource = NewValue
 End Property
- 
+
+Public Property Get InitiatorWidget() As cWidgetBase
+  If Not mInitiatorWidget Is Nothing Then Set InitiatorWidget = mInitiatorWidget
+End Property
+
 Public Property Get MenuKeyPath() As String
 Dim M As cwMenu
   If mInitiatorWidget Is Nothing Then Exit Property
@@ -75,25 +89,32 @@ Dim M As cwMenu
 End Property
 
 Public Property Get MenuItemKeyPath() As String
+  If Not mActiveMenuItem Is Nothing And Not mActiveMenuItem.IsActive Then Exit Property
   If mDataSource Is Nothing Then Exit Property
   MenuItemKeyPath = MenuKeyPath
   If Not mActiveMenuItem Is Nothing Then MenuItemKeyPath = MenuItemKeyPath & ">" & mActiveMenuItem.Widget.Key
 End Property
 
-Public Sub InitAndShow(InitiatorWidget As cWidgetBase, Optional DataSource As cMenuItem, Optional ByVal DirectionBehaviour As enmMenuPopUpPosition)
+Public Sub InitAndShow(InitiatorWidget As cWidgetBase, Optional DataSource As cMenuItem, Optional ByVal DirectionBehaviour As enmMenuPopUpPosition, Optional ByVal WithFocus As Boolean)
 Dim MenuItem As cwMenuItem, PopupPosX As Single, PopupPosY As Single, MousePosX As Long, MousePosY As Long
- 
-  If Not PopUp Is Nothing Then DestroyPopup
+  
+  If Not fPopUp Is Nothing Then DestroyPopup
   
   Set mInitiatorWidget = InitiatorWidget
   If mInitiatorWidget Is Nothing Then Exit Sub
+ 
   If TypeOf mInitiatorWidget.object Is cwMenuItem Then
     Set MenuItem = mInitiatorWidget.object
     Set mInitiatorWidget = mInitiatorWidget.Parent
   End If
+  If mInitiatorWidget Is Nothing Then Exit Sub
+  If mInitiatorWidget.Root Is Nothing Then Exit Sub
   If mInitiatorWidget.Root.MouseKeyDown Then mInitiatorWidget.MouseUp 1, 0, 0, 0
- 
+  
   If Not DataSource Is Nothing Then Set mDataSource = DataSource
+  
+  On Error Resume Next
+
   ConstructMenuFromDataSource mDataSource
   mMenuWidth = mMenuWidth * mInitiatorWidget.Zoom
   mMenuHeight = mMenuHeight * mInitiatorWidget.Zoom
@@ -104,6 +125,9 @@ Dim MenuItem As cwMenuItem, PopupPosX As Single, PopupPosY As Single, MousePosX 
     MenuItem.Widget.CalculateScreenPopupOffsets mMenuWidth, mMenuHeight, PopupPosX, PopupPosY, True, MousePosX, MousePosY
   Else 'the initial usercall
     Set mActiveRootWidget = mInitiatorWidget.Root.ActiveWidget
+    If Not mActiveRootWidget Is Nothing Then
+      If TypeOf mActiveRootWidget.object Is cwMenuBar Then Set mActiveRootWidget = Nothing
+    End If
     Select Case DirectionBehaviour
       Case PopupBehaviourDropDownLeftAligned
         Dim x As Single, y As Single
@@ -124,25 +148,28 @@ Dim MenuItem As cwMenuItem, PopupPosX As Single, PopupPosY As Single, MousePosX 
     End Select
   End If
   
-  Set PopUp = New cfPopUp
-  PopUp.Load Me, PopupPosX, PopupPosY, mMenuWidth, mMenuHeight, mInitiatorWidget.Zoom
+  Set fPopUp = New cfPopUp
+  fPopUp.Load Me, PopupPosX, PopupPosY, mMenuWidth, mMenuHeight, mInitiatorWidget.Zoom
+  
+  fPopUp.Show
   
   If Not TypeOf mInitiatorWidget.object Is cwMenu Then
-    mInitiatorWidget.Root.BlockKeyEvents True, PopUp.Form
+    mInitiatorWidget.Root.BlockKeyEvents True, fPopUp.Form
+    Set SC = New_c.SubClass
+    If App.LogMode Then SC.Hook mInitiatorWidget.Root.DialogFormHwnd
   End If
-
-  PopUp.Show
-  If Widgets.Count Then Widgets(1).Widget.SetFocus
+  If WithFocus And Widgets.Count > 0 Then Widgets(1).Widget.SetFocus
+If Err Then Err.Clear
 End Sub
 
-Private Sub ShowSubMenu(ByVal MenuItem As cwMenuItem)
+Private Sub ShowSubMenu(ByVal MenuItem As cwMenuItem, Optional ByVal WithFocus As Boolean)
   If Not mSubMenu Is Nothing Then
     If mSubMenu.MenuKeyPath = MenuItemKeyPath Then Exit Sub
     mSubMenu.DestroyPopup
   End If
   Set mSubMenu = New cwMenu
       mSubMenu.Widget.FontSize = MenuItem.Widget.FontSize
-      mSubMenu.InitAndShow MenuItem.Widget, MenuItem.SubMenuDS
+      mSubMenu.InitAndShow MenuItem.Widget, MenuItem.SubMenuDS, , WithFocus
 End Sub
 
 Private Sub ConstructMenuFromDataSource(DataSource As cMenuItem)
@@ -177,7 +204,7 @@ Dim i As Long, dx As Double, dy As Double, Caption As String
       dy = mRowHeight
     End If
     
-    Set MenuItem = Widgets.Add(New cwMenuItem, DSItem.Key, 0, mMenuHeight, mMenuWidth - 2, dy)
+    Set MenuItem = Widgets.Add(New cwMenuItem, DSItem.Key, 1, mMenuHeight, mMenuWidth - 2, dy)
         MenuItem.Widget.ImageKey = DSItem.IconKey
         MenuItem.Widget.Enabled = DSItem.Enabled
         MenuItem.Widget.FontName = W.FontName
@@ -185,11 +212,15 @@ Dim i As Long, dx As Double, dy As Double, Caption As String
         MenuItem.Widget.BackColor = W.BackColor
         MenuItem.Caption = Caption
         MenuItem.IsCheckable = DSItem.IsCheckable
+        MenuItem.IsOption = DSItem.IconKey = OptionMenuItemIconKey  'Here is the workaround to have
+                                                                    'option-like cwMenuItems from cMenuItems
+                                                                    'with "magic" iconkey indicator
         If DSItem.IsCheckable Then MenuItem.Checked = DSItem.Checked
         If Caption = "-" Then MenuItem.Widget.Enabled = False
         If DSItem.SubItemCount Then Set MenuItem.SubMenuDS = DSItem
     mMenuHeight = mMenuHeight + dy
   Next i
+  mMenuWidth = mMenuWidth + 1
   mMenuHeight = mMenuHeight + 4
 End Sub
 
@@ -203,41 +234,53 @@ Dim MItem As cMenuItem
     Set MItem = mDataSource.SubItemByPathKey(CurMenuItemPath)
     If MItem.IsCheckable Then MItem.Checked = Not MItem.Checked
     DestroyPopup
-  If Err Then Err.Clear: Exit Sub
+  If Err Then Err.Clear
   RaiseEvent Click(CurMenuItemPath)
   W.RaiseBubblingEvent Me, "Click", CurMenuItemPath
 End Sub
- 
+
+Private Sub SC_WindowProc(Result As Long, ByVal Msg As Long, ByVal wParam As Long, ByVal lParam As Long)
+  Select Case Msg 'check only for NonClient - WM_NCLBUTTONDOWN,WM_NCRBUTTONDOWN,WM_NCMBUTTONDOWN
+    Case &HA1, &HA4, &HA7
+        DestroyPopup
+  End Select
+  If Not SC Is Nothing Then Result = SC.CallWindowProc(Msg, wParam, lParam)
+End Sub
+
 Public Sub DestroyPopup()
 Dim M As cwMenu, WasRootMenu As Boolean
-  If RootMenu Is Me Then WasRootMenu = True
+  On Error Resume Next
 
-  If Not mInitiatorWidget Is Nothing Then
-    If Not mInitiatorWidget.object Is Nothing Then
-      If TypeOf mInitiatorWidget.object Is cwMenu Then
-        Set M = mInitiatorWidget.object
-        Set M.SubMenu = Nothing
-      Else
-        Widgets.RemoveAll
+    If RootMenu Is Me Then WasRootMenu = True
+  
+    If Not mInitiatorWidget Is Nothing Then
+      If Not mInitiatorWidget.object Is Nothing Then
+        If TypeOf mInitiatorWidget.object Is cwMenu Then
+          Set M = mInitiatorWidget.object
+          Set M.SubMenu = Nothing
+        Else
+          Widgets.RemoveAll
+        End If
       End If
     End If
-  End If
-  If Not mSubMenu Is Nothing Then
-    mSubMenu.DestroyPopup
-    Set mSubMenu = Nothing
-  End If
-  
-  If Not PopUp Is Nothing Then PopUp.Unload
-  Set PopUp = Nothing
- 
-  Set mActiveMenuItem = Nothing
-  Set mActiveRootWidget = Nothing
-  Set mInitiatorWidget = Nothing
-  If WasRootMenu Then
-    RaiseEvent MenuDestroyed(mDestroyedByKeyPress)
-    W.RaiseBubblingEvent Me, "MenuDestroyed", mDestroyedByKeyPress
-  End If
-  mDestroyedByKeyPress = False
+    If Not mSubMenu Is Nothing Then
+      mSubMenu.DestroyPopup
+      Set mSubMenu = Nothing
+    End If
+
+    Set mActiveMenuItem = Nothing
+    Set mActiveRootWidget = Nothing
+    Set mInitiatorWidget = Nothing
+    
+    If WasRootMenu Then
+      RaiseEvent MenuDestroyed(mDestroyedByKeyPress)
+      W.RaiseBubblingEvent Me, "MenuDestroyed", mDestroyedByKeyPress
+    End If
+    mDestroyedByKeyPress = False
+    
+    If Not fPopUp Is Nothing Then fPopUp.Unload
+    Set fPopUp = Nothing
+  If Err Then Err.Clear
 End Sub
  
 Private Property Get InMouseOverStack() As Boolean
@@ -287,25 +330,39 @@ Dim WR As cWidgetRoot
   End If
 End Function
 
-'------ Event-checks, which ensure Popup-Deactivation under certain conditions -----
-Private Sub PopUp_AppDeactivate()
+'------ Event-checks, which ensure fPopUp-Deactivation under certain conditions -----
+Private Sub fPopUp_AppDeactivate()
   DestroyPopup
 End Sub
-Private Sub PopUp_MouseClickOutside()
+Private Sub fPopUp_MouseClickOutside()
   If Not InMouseOverStack Then DestroyPopup
 End Sub
-Private Sub PopUp_CheckForAdditionalCloseConditions()
+Private Sub fPopUp_CheckForAdditionalCloseConditions()
+Dim Par As cWidgetForm
+  
   If mInitiatorWidget Is Nothing Then Exit Sub
   If mInitiatorWidget.object Is Nothing Then Exit Sub
   If TypeOf mInitiatorWidget.object Is cwMenu Then Exit Sub
   If mInitiatorWidget.Root Is Nothing Then Exit Sub
-  If Not mActiveRootWidget Is mInitiatorWidget.Root.ActiveWidget Then DestroyPopup
-  If mInitiatorWidget.Root.WidgetForm Is Nothing Then Exit Sub
-  If mInitiatorWidget.Root.WidgetForm.Parent Is Nothing Then
-    If mInitiatorWidget.Root.WidgetForm.WindowState = vbMinimized Then DestroyPopup
-  Else
-    If mInitiatorWidget.Root.WidgetForm.Parent.WindowState = vbMinimized Then DestroyPopup
-  End If
+  
+  On Error Resume Next
+  
+    If Not mActiveRootWidget Is Nothing And Not mActiveRootWidget Is mInitiatorWidget.Root.ActiveWidget Then
+      DestroyPopup
+      Exit Sub
+    End If
+    
+  If Err Then Err.Clear: Exit Sub
+  
+    If mInitiatorWidget.Root.WidgetForm Is Nothing Then Exit Sub
+    Set Par = mInitiatorWidget.Root.WidgetForm.Parent
+    If Not Par Is Nothing Then
+      If Par.WindowState = vbMinimized Then DestroyPopup
+    Else
+      If mInitiatorWidget.Root.WidgetForm.WindowState = vbMinimized Then DestroyPopup
+    End If
+    
+  If Err Then Err.Clear
 End Sub
 Private Sub mInitiatorWidget_ContainerResize()
   If mInitiatorWidget Is Nothing Then Exit Sub
@@ -313,9 +370,9 @@ Private Sub mInitiatorWidget_ContainerResize()
   If Not TypeOf mInitiatorWidget.object Is cwMenu Then DestroyPopup
 End Sub
 
-'---------------- End of Popup-Deactivation-Checks ------------------
+'---------------- End of fPopUp-Deactivation-Checks ------------------
 
-Private Sub PopUp_InitialMouseUp(ByVal Button As Integer)
+Private Sub fPopUp_InitialMouseUp(ByVal Button As Integer)
 Dim M As cwMenu
   Set M = MenuUnderCursor
   If Not M Is Nothing Then M.W_MouseUp Button, 0, mMouseX, mMouseY
@@ -328,6 +385,7 @@ Dim SW As cWidgetBase
   Select Case EventName
     Case "W_MouseUp"
       Set mActiveMenuItem = Sender
+      If P3 < 0 Or P4 < 0 Or P3 > SW.Width Or P4 > SW.Height Then Exit Sub
       W_MouseUp CInt(P1), CInt(P2), SW.Left + P3, SW.Top + P4
     Case "W_MouseMove"
       Set mActiveMenuItem = Sender
@@ -372,7 +430,8 @@ End Sub
 Public Sub KeyDown(KeyCode As Integer, Shift As Integer)
   If Not mSubMenu Is Nothing Then mSubMenu.KeyDown KeyCode, Shift: Exit Sub
   
-  Dim i As Long, MItem As cwMenuItem, MItemIdx As Long, RM As cwMenu
+  Dim i As Long, j As Long, MItem As cwMenuItem, MItemIdx As Long, RM As cwMenu
+ 
   For Each MItem In Widgets
     If MItem.Widget.Focused Then Exit For
   Next MItem
@@ -390,27 +449,36 @@ Public Sub KeyDown(KeyCode As Integer, Shift As Integer)
     Case vbKeyRight
       If Not MItem Is Nothing Then
         If MItem.Widget.Enabled And Not MItem.SubMenuDS Is Nothing Then
-          ShowSubMenu MItem
-        Else
-          If RootMenu Is Me Then
-            RaiseEvent MenuBarEntryShift(False)
-            W.RaiseBubblingEvent Me, "MenuBarEntryShift", False
-          End If
+          ShowSubMenu MItem, True
+          Exit Sub
         End If
       End If
+      If RootMenu Is Me Then
+        RaiseEvent MenuBarEntryShift(False)
+        W.RaiseBubblingEvent Me, "MenuBarEntryShift", False
+      End If
     Case vbKeyUp
-      For i = MItemIdx - 1 To 1 Step -1
-        If Widgets(i).Widget.Enabled Then Widgets(i).Widget.SetFocus: Exit For
+      For i = 1 To Widgets.Count
+         j = MItemIdx - i
+         If j < 1 Then j = Widgets.Count
+        If Widgets(j).Widget.Enabled Then Widgets(j).Widget.SetFocus: Exit For
       Next i
     Case vbKeyDown
-      For i = MItemIdx + 1 To Widgets.Count
-        If Widgets(i).Widget.Enabled Then Widgets(i).Widget.SetFocus: Exit For
+      For i = 1 To Widgets.Count
+         j = MItemIdx + i
+         If j > Widgets.Count Then j = 1
+        If Widgets(j).Widget.Enabled Then Widgets(j).Widget.SetFocus: Exit For
       Next i
+      
     Case vbKeyReturn
       
       If Not MItem Is Nothing Then
         If MItem.Widget.Enabled Then
-          If Not RootMenu Is Nothing Then mDestroyedByKeyPress = True: RootMenu.RaiseClick MenuItemKeyPath
+          If Not RootMenu Is Nothing Then
+            mDestroyedByKeyPress = True
+            If MItem.IsOption Then UnCheckAllMenuOptions MItem
+            RootMenu.RaiseClick MenuItemKeyPath
+          End If
         End If
       End If
       If Not RootMenu Is Nothing Then mDestroyedByKeyPress = True: RootMenu.DestroyPopup
@@ -427,7 +495,7 @@ Public Sub KeyPress(KeyAscii As Integer)
     MItem.Widget.AccessKeyPress KeyAscii
   Next MItem
 End Sub
- 
+
 Private Sub W_MouseDown(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
   UpdateLastMouseInfo x, y
 End Sub
@@ -437,16 +505,16 @@ End Sub
 Public Sub W_MouseUp(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
   If Button < 0 Or x <= 0 Or y <= 0 Then Exit Sub Else UpdateLastMouseInfo x, y
   
-  If mSubMenu Is Nothing Then
-    If Not mActiveMenuItem Is Nothing Then
-      If Not mActiveMenuItem.SubMenuDS Is Nothing Then
+  If mSubMenu Is Nothing And Not mActiveMenuItem Is Nothing Then
+      If Not mActiveMenuItem.SubMenuDS Is Nothing And mActiveMenuItem.Widget.Enabled Then
         ShowSubMenu mActiveMenuItem
       ElseIf mActiveMenuItem.Widget.Enabled Then
-        If Not RootMenu Is Nothing Then RootMenu.RaiseClick MenuItemKeyPath
+        If Not RootMenu Is Nothing Then
+          If mActiveMenuItem.IsOption Then UnCheckAllMenuOptions mActiveMenuItem    'First we clear all the options
+          RootMenu.RaiseClick MenuItemKeyPath                                       'And in here we set the current one
+        End If
       End If
-    End If
   End If
-'Debug.Print "W_MouseUp", MenuItemKeyPath
 End Sub
 
 Friend Sub UpdateLastMouseInfo(ByVal x As Single, ByVal y As Single)
@@ -456,7 +524,6 @@ Friend Sub UpdateLastMouseInfo(ByVal x As Single, ByVal y As Single)
       Set mSubMenu = Nothing
     End If
   End If
-
   mMouseX = x: mMouseY = y
 End Sub
 
@@ -465,6 +532,40 @@ Private Sub W_Paint(CC As cCairoContext, ByVal xAbs As Single, ByVal yAbs As Sin
   CC.Paint
   CC.SetLineWidth 1, True
   W.Alpha = 0.7
-  Cairo.Theme.DrawTo CC, W, thmTypeBorder, 0, 0, 0, dx_Aligned, dy_Aligned
+  Cairo.Theme.DrawTo CC, W, thmTypeBorder, 0, 0, 0, dx_Aligned, dy_Aligned, 0
   W.Alpha = 1
 End Sub
+
+Private Sub UnCheckAllMenuOptions(MItem As cwMenuItem)
+'Unchecks all the menu options items that are in the same level of hierarchy of MItem
+Dim MItemX As cwMenuItem, i As Long, MIdx As Long
+  If MItem.Widget.Parent Is Nothing Then Exit Sub
+  If MItem.Widget.Parent.ChildCount = 0 Then Exit Sub
+  On Error Resume Next
+    MIdx = MItem.Widget.Parent.Widgets.GetOneBasedChildIndexByKey(MItem.Widget.Key)
+    For i = MIdx - 1 To 1 Step -1 'first we go upwards
+      If TypeOf MItem.Widget.Parent.Widgets(i) Is cwMenuItem Then
+        Set MItemX = MItem.Widget.Parent.Widgets(i)
+        If MItemX.Caption = "-" Then Exit For
+        If MItemX.IsOption Then
+          mDataSource.SubItemByKey(MItemX.Widget.Key).Checked = False
+        End If
+      End If
+    Next
+    For i = MIdx To MItem.Widget.Parent.Widgets.Count  'now we loop downwards
+      If TypeOf MItem.Widget.Parent.Widgets(i) Is cwMenuItem Then
+        Set MItemX = MItem.Widget.Parent.Widgets(i)
+        If MItemX.Caption = "-" Then Exit For
+        If MItemX.IsOption Then
+          mDataSource.SubItemByKey(MItemX.Widget.Key).Checked = False
+        End If
+      End If
+    Next
+  If Err Then Err.Clear
+End Sub
+
+Private Sub Class_Terminate()
+  Set SC = Nothing
+  If Not fPopUp Is Nothing Then fPopUp.Unload
+End Sub
+

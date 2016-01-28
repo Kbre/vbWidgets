@@ -1,3 +1,5 @@
 *.exp
 *.lib
 *.vbw
+/*.dll
+/*.bak

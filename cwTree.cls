@@ -23,20 +23,21 @@ Public WithEvents VList As cwVList 'we inherit visually from a preimplemented Wi
 Attribute VList.VB_VarHelpID = -1
 Public DoubleClickExpandsNodes As Boolean
 
-Private WithEvents mDS As cDataSource, WithEvents tmrDecouple As cTimer
+Private mDataSourceKey As String, WithEvents mDS As cDataSource, WithEvents tmrDecouple As cTimer
 Attribute mDS.VB_VarHelpID = -1
 Attribute tmrDecouple.VB_VarHelpID = -1
 Private WithEvents W As cWidgetBase
 Attribute W.VB_VarHelpID = -1
 
 Private mCaption As String
-Private mLastHoverIndex As Long, mLastArrowSize As Single, mLastArrowXOffs As Single, mInArrowArea As Boolean
+Private mLastHoverIndex As Long, mLastArrowSize As Single, mLastArrowXOffs As Single, mInArrowArea As Boolean, mLastMouseDownHoverIndex As Long
 
 Private Sub Class_Initialize()
   Set VList = New cwVList 'the Widget-Instance, to inherit from
       VList.RowHeight = 21
       VList.ListCount = 0
       VList.AllowLeftRightKeys = False
+      
   'the following is some kind of "visual inheritance", since we use the already existent 'W'
   'from the VList, instead of creating our own, new 'W'-instance per: Set W = Cairo.WidgetBase
   Set W = VList.Widget
@@ -50,6 +51,16 @@ Public Property Get Widgets() As cWidgets
 End Property
 
 '*** Public Properties ****
+Public Property Get DataSourceKey() As String
+  DataSourceKey = mDataSourceKey
+End Property
+Public Property Let DataSourceKey(ByVal NewValue As String)
+  mDataSourceKey = NewValue
+  On Error Resume Next
+    Set DataSource = Cairo.DataSources(mDataSourceKey)
+  On Error GoTo 0
+End Property
+
 Public Property Get DataSource() As cDataSource
   Set DataSource = mDS
 End Property
@@ -83,7 +94,7 @@ Dim Btn As cwButton
   If mCaption = NewValue Then Exit Property
   mCaption = NewValue
   If Len(mCaption) Then
-    VList.HeaderHeight = 23
+    If VList.HeaderHeight = 0 Then VList.HeaderHeight = 23
     If Not Widgets.Exists("btnExpand") Then
       MakeCaptionButton "btnExpand", 3, "6", "Expand all", vbGreen
       MakeCaptionButton "btnCollapse", 20, "5", "Collapse all", vbCyan
@@ -98,7 +109,7 @@ End Property
 
 Private Sub MakeCaptionButton(Key As String, ByVal xOffs As Long, Caption As String, ToolTip As String, BackColor As Long)
 Dim Btn As cwButton
-  Set Btn = Widgets.Add(New cwButton, Key, xOffs, 2, 17, 17)
+  Set Btn = Widgets.Add(New cwButton, Key, xOffs, (VList.HeaderHeight - 17) \ 2, 17, 17)
       Btn.Widget.CanGetFocus = False
       Btn.Widget.ToolTip = ToolTip
       Btn.Widget.BackColor = BackColor
@@ -110,6 +121,10 @@ Dim Btn As cwButton
       Btn.BorderRadius = 8
       Btn.DownStateCaptionOffset = 0
 End Sub
+ 
+Public Property Get LastMouseDownIndex() As Long
+  LastMouseDownIndex = mLastMouseDownHoverIndex
+End Property
 
 Public Sub DrawArrow(CC As cCairoContext, ByVal Index As Long, ByVal xOffs As Single, ByVal ArrowSize As Single, ByVal Expanded As Boolean, Optional ByVal Expandable As Boolean = True)
 Dim State As enmThemeDrawingState
@@ -137,16 +152,25 @@ End Sub
 Private Sub VList_Click()
 Dim DoRaise As Boolean
   If Not mDS Is Nothing Then
-    If mDS.Count > 0 Then
-      If VList.ListIndex = -1 And mDS.AbsolutePosition <> VList.ListIndex Then
-        mDS.MoveFirst
-        mDS.MovePrevious
-        DoRaise = True
-      ElseIf mDS.AbsolutePosition <> VList.ListIndex + 1 Then
-        mDS.AbsolutePosition = VList.ListIndex + 1
-        DoRaise = True
-      End If
+    If VList.ListIndex = -1 And mDS.AbsolutePosition > 0 Then
+      mDS.MoveFirst
+      mDS.MovePrevious 'ensure BOF-Position
+      DoRaise = True
+    ElseIf VList.ListIndex <> -1 And mDS.AbsolutePosition <> VList.ListIndex + 1 Then
+      mDS.AbsolutePosition = VList.ListIndex + 1
+      DoRaise = True
     End If
+
+'    If mDS.Count > 0 Then
+'      If VList.ListIndex = -1 And mDS.AbsolutePosition <> VList.ListIndex Then
+'        mDS.MoveFirst
+'        mDS.MovePrevious
+'        DoRaise = True
+'      ElseIf mDS.AbsolutePosition <> VList.ListIndex + 1 Then
+'        mDS.AbsolutePosition = VList.ListIndex + 1
+'        DoRaise = True
+'      End If
+'    End If
   End If
   If DoRaise Then
     RaiseEvent Click
@@ -164,8 +188,13 @@ End Sub
 
 Private Sub VList_MouseMoveOnListItem(ByVal HoverIndex As Long, ByVal RelX As Single, ByVal RelY As Single)
 Dim InArrowArea As Boolean
-  mLastHoverIndex = HoverIndex
+  If mLastHoverIndex <> HoverIndex Then
+    mInArrowArea = False
+    mLastHoverIndex = HoverIndex
+    W.Refresh
+  End If
   InArrowArea = (RelX > mLastArrowXOffs - 4 And RelX < mLastArrowXOffs + mLastArrowSize + 4)
+'  Debug.Print HoverIndex, InArrowArea
   If InArrowArea <> mInArrowArea Then
     mInArrowArea = InArrowArea
     W.Refresh
@@ -186,8 +215,8 @@ Private Sub VList_OwnerDrawHeader(CC As vbRichClient5.cCairoContext, ByVal dx As
   Cairo.Theme.DrawTo CC, W, thmTypeShine, 0, 0, -1, dx, Int((dy + 2) \ 2) - 1, 0, thmDirectionDown
   
   CC.DrawLine 0, dy, dx, dy, True, 1, W.BorderColor, 0.3
-  
-  CC.DrawText 40, 0, dx - 40, dy, mCaption, True, vbLeftJustify, 2, True
+  W.SelectFontSettingsInto CC
+  CC.DrawText 40, 1, dx - 40, dy, mCaption, True, vbLeftJustify, 2, True
 End Sub
 
 Private Sub VList_OwnerDrawItem(ByVal Index As Long, CC As cCairoContext, ByVal dx As Single, ByVal dy As Single, ByVal Alpha As Single)
@@ -207,13 +236,17 @@ Dim W As cWidgetBase: Set W = Sender.Widget
 End Sub
 
 Private Sub W_MouseDown(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
-  If mInArrowArea Then ExpandOrCollapse VList.HoverIndex
+  mLastMouseDownHoverIndex = VList.HoverIndex
+End Sub
+
+Private Sub W_MouseUp(Button As Integer, Shift As Integer, ByVal x As Single, ByVal y As Single)
+  If mInArrowArea And mLastMouseDownHoverIndex = VList.HoverIndex Then ExpandOrCollapse VList.HoverIndex
 End Sub
 
 Private Sub W_KeyDown(KeyCode As Integer, Shift As Integer)
-Dim Key, Value
+Dim Key, Value, Parent As cCollection, ParentBackIndex As Long
   If VList.ListIndex < 0 Then Exit Sub
-  If Not mDS.TreeElementInfoByVisibleIndex(VList.ListIndex, Key, Value) Then Exit Sub
+  If Not mDS.TreeElementInfoByVisibleIndex(VList.ListIndex, Key, Value, , , Parent) Then Exit Sub
   If TypeOf Value Is cCollection Then 'we have a Node
     Select Case KeyCode
       Case vbKeyRight
@@ -231,13 +264,16 @@ Dim Key, Value
         Else
           If VList.ListIndex > 0 Then VList.ListIndex = VList.ListIndex - 1
         End If
+      Case vbKeyBack: ParentBackIndex = mDS.TreeNodeGetVisibleIndex(Parent) + 1
     End Select
   Else 'we have a Value-Item
     Select Case KeyCode
       Case vbKeyRight: If VList.ListIndex < mDS.Count - 1 Then VList.ListIndex = VList.ListIndex + 1
       Case vbKeyLeft:  If VList.ListIndex > 0 Then VList.ListIndex = VList.ListIndex - 1
+      Case vbKeyBack:  ParentBackIndex = mDS.TreeNodeGetVisibleIndex(Parent) + 1
     End Select
   End If
+  If ParentBackIndex Then VList.ListIndex = ParentBackIndex - 1
 End Sub
 
 Private Sub tmrDecouple_Timer()
@@ -252,6 +288,9 @@ Private Sub ExpandOrCollapse(ByVal Index As Long)
 Dim Key, Value
   If Not mDS.TreeElementInfoByVisibleIndex(Index, Key, Value) Then Exit Sub
   If Not TypeOf Value Is cCollection Then Exit Sub
+'  If Value.Count = 0 Then Exit Sub
   If mDS.TreeNodeIsExpanded(Value) Then mDS.TreeNodeCollapse Value Else mDS.TreeNodeExpand Value
 End Sub
+
+
 
